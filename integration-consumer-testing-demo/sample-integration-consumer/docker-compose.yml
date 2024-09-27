@@ -1,0 +1,81 @@
+version: "3.8"
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - "2181:2181"
+    networks:
+      - kafka_network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_LISTENERS: INSIDE://0.0.0.0:9092,OUTSIDE://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9092,OUTSIDE://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'  # Enables automatic topic creation
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    networks:
+      - kafka_network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 'kafka:9092'
+    ports:
+      - "8080:8080"
+    networks:
+      - kafka_network
+
+  kafka-create-topics:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka-create-topics
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "echo 'Waiting for Kafka broker to be ready...';
+      cub kafka-ready -b kafka:9092 1 20 && \
+      echo 'Creating Kafka topics...'; \
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic product-domain-topic --partitions 1 --replication-factor 1; \
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic product-integration-topic --partitions 1 --replication-factor 1; \
+      echo 'Listing Kafka topics:'; \
+      kafka-topics --bootstrap-server kafka:9092 --list; \
+      echo 'Kafka topics creation complete.'"
+    networks:
+      - kafka_network
+
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: consumer
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: 'kafka:9092'
+      INPUT_TOPIC: 'product-domain-topic'
+      OUTPUT_TOPIC: 'product-integration-topic'
+      GROUP_ID: 'product-consumer-group'
+    networks:
+      - kafka_network
+
+networks:
+  kafka_network:
+    driver: bridge
