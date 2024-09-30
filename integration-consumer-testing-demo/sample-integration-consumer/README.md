@@ -110,7 +110,8 @@ Inside the /sample-integration-consumer directory, run the following commands:
 2.	Install Test Dependencies:
 
         Navigate to the sample-integration-consumer/ directory and install the required dependencies:
-       ```bash
+      
+        ```bash
        pip install -r requirements.txt
        ```
 
